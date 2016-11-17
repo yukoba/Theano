@@ -51,6 +51,7 @@
 #define NAN CUDART_NAN_F
 
 #include <cublas_v2.h>
+#include <cublasXt.h>
 
 #ifdef _WIN32
 # ifdef _CUDA_NDARRAY_C
@@ -108,6 +109,7 @@ typedef float real;
 
 /* Use this handle to make cublas calls */
 extern DllExport cublasHandle_t handle;
+extern DllExport cublasXtHandle_t handle_xt;
 
 /**
  * Allocation and freeing of device memory should go through these functions so

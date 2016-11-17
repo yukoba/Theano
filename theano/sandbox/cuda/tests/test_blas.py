@@ -44,6 +44,24 @@ mode_without_gpu.check_py_code = False
 def my_rand(*shape):
     return theano._asarray(numpy.random.rand(*shape), dtype='float32')
 
+import time
+
+def test_benchmark_dot():
+    size = 16384
+    a = numpy.random.randn(size, size).astype(numpy.float32)
+    b = numpy.random.randn(size, size).astype(numpy.float32)
+
+    x = tensor.fmatrix()
+    y = tensor.fmatrix()
+
+    f = theano.function([x, y], tensor.dot(x, y))
+
+    s = time.time()
+    z = f(a, b)
+    print(time.time() - s)
+    print(z.shape)
+    assert False
+
 
 class TestBatchedDot(unittest_tools.InferShapeTester):
     mode = mode_with_gpu

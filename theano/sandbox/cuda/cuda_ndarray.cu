@@ -35,6 +35,7 @@
 #define PRECHECK_ERROR 0
 
 cublasHandle_t handle = NULL;
+cublasXtHandle_t handle_xt = NULL;
 int* err_var = NULL;
 
 /////////////////////////
@@ -76,7 +77,7 @@ void * device_malloc(size_t size)
 
 ///@TODO: thejaswi: link this option to a theano config variable?
 static bool g_use_cnmem = false;
-static const int g_max_devices = 8;
+static const int g_max_devices = 16;
 int initCnmem(int card_number_provided, int card_nb, size_t mem) {
     static bool cnmemInitialized = false;
     if(cnmemInitialized) {
@@ -3753,12 +3754,49 @@ cublas_init()
     // This may lead to a slight variance from run to run in some operations
     cublasSetAtomicsMode(handle, CUBLAS_ATOMICS_ALLOWED);
 #endif
+
+    err = cublasXtCreate(&handle_xt);
+    if (err != CUBLAS_STATUS_SUCCESS)
+    {
+        PyErr_Format(PyExc_RuntimeError,
+                     "cublas_init: 'cublasXtCreate' failed! Reason=%s\n",
+                     cudaGetErrorString(cudaGetLastError()));
+        return -1;
+    }
+
+    int useDeviceIds[g_max_devices];
+    for (int i = 0; i < g_max_devices; i++)
+    {
+        useDeviceIds[i] = i;
+    }
+
+    int numDevices = 0;
+    if (cudaGetDeviceCount(&numDevices) != CUBLAS_STATUS_SUCCESS)
+    {
+        PyErr_Format(PyExc_RuntimeError,
+                     "cublas_init: 'cudaGetDeviceCount' failed! Reason=%s\n",
+                     cudaGetErrorString(cudaGetLastError()));
+        return -1;
+    }
+
+    err = cublasXtDeviceSelect(handle_xt, numDevices, useDeviceIds);
+    if (err != CUBLAS_STATUS_SUCCESS)
+    {
+        PyErr_Format(PyExc_RuntimeError,
+                     "cublas_init: 'cublasXtDeviceSelect' failed! Reason=%s\n",
+                     cudaGetErrorString(cudaGetLastError()));
+        return -1;
+    }
+
     return 0;
 }
 
 static void
 cublas_shutdown()
 {
+    if (handle_xt != NULL)
+        cublasXtDestroy(handle_xt);
+    handle_xt = NULL;
     if (handle != NULL)
         cublasDestroy(handle);
     // No point in handling any errors here
@@ -4273,7 +4311,11 @@ int CudaNdarray_gemm(float alpha, const CudaNdarray * A, const CudaNdarray * B, 
     if (sy == 0){sy = 1;}\
     if (sz == 0){sz = 1;}\
     if ((sx > 0) && (sy > 0) && (sz > 0)) { \
-        err = cublasSgemm(handle, T0, T1, D0, D1, D2, &a, x, sx, y, sy, &b, z, sz); \
+        if (handle_xt != NULL) { \
+            err = cublasXtSgemm(handle_xt, T0, T1, D0, D1, D2, &a, x, sx, y, sy, &b, z, sz); \
+        } else { \
+            err = cublasSgemm(handle, T0, T1, D0, D1, D2, &a, x, sx, y, sy, &b, z, sz); \
+        } \
     } else { \
         PyErr_SetString(PyExc_AssertionError, "negative stride to sGemm");\
         Py_XDECREF(A_new);\
